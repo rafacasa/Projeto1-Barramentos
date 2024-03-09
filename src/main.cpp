@@ -19,11 +19,11 @@
 //TODO No loop rodar funcoes para esperar comunicações modbus
 
 // put function declarations here:
-int myFunction(int, int);
+bool quadroModbusDisponivel();
 
 void setup() {
   // put your setup code here, to run once:
-  int result = myFunction(2, 3);
+  //int result = myFunction(2, 3);
 }
 
 void loop() {
@@ -31,6 +31,32 @@ void loop() {
 }
 
 // put function definitions here:
-int myFunction(int x, int y) {
-  return x + y;
+bool quadroModbusDisponivel() {
+  long milisegundos;      // Variável para guardar tempo desde ultima recepcáo de bytes
+  int bytesAvailable;     // Variável para guardar a quantidade de bytes do quadro modbus
+  bool endFrame = false;  // flag que indica que o quadro chegou
+
+  if (Serial.available() > 0) {
+    bytesAvailable = Serial.available(); // Quantos bytes estão disponíveis
+    milisegundos = millis(); // Tempo atual
+
+    // O quadro Modbus RTU termina quando duas condicoes sao satisfeitas:
+    // 1. nao sao recebidos mais bytes e
+    // 2. o tempo decorrido sem recepcao supera 3.5 tempos de byte
+    
+    while (!endFrame) {
+      // Se aumentou a quantidade de bytes disponíveis - chegou um byte novo
+      // Entao se reseta o tempo da última mensagem
+      if (Serial.available() != bytesAvailable) {
+        bytesAvailable = Serial.available();
+        milisegundos = millis();
+      } else {
+        // Se o tempo desde a ultima mensagem é maior que o END TIME - o quadro foi recebido
+        if ((millis() - milisegundos) > END_FRAME_TIME) {
+          endFrame = true;
+        }
+      }
+    }
+  }
+  return endFrame;
 }
