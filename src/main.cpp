@@ -32,7 +32,8 @@ bool broadcast;        // Informa se o último quadro recebido foi um broadcast 
 bool quadroModbusDisponivel();
 bool checaEnderecoQuadro();
 uint8_t executaSolicitacao();
-int lerQuadroModbus();
+uint8_t executaWriteMultipleRegisters();
+bool lerQuadroModbus();
 
 void setup() {
   // put your setup code here, to run once:
@@ -40,10 +41,10 @@ void setup() {
 }
 
 void loop() {
-  int funcao_solicitada;
+
   // Verifica se há um quadro modbus disponivel
   if (quadroModbusDisponivel()) {
-    funcao_solicitada = lerQuadroModbus();
+    lerQuadroModbus();
     
   }
 }
@@ -80,8 +81,8 @@ bool quadroModbusDisponivel() {
 }
 
 // Função que lê o quadro Modbus recebido e verifica erros de crc, endereço e função
-// Retorna a indice da funcao solicitada ou -1 caso tenha algum erro
-int lerQuadroModbus() {
+// Retorna true se houve erro na execução da solicitação
+bool lerQuadroModbus() {
   uint16_t bytesRecebidos, valueCrc;
   uint8_t codigoExcessao;
 
@@ -97,12 +98,12 @@ int lerQuadroModbus() {
 
   // Encerra execução quando há erros de crc no quadro
   if (valueCrc != 0) {
-    return -1;
+    return true;
   }
 
   // Encerra execução quando o endereço do quadro não é este dispositivo
   if (!checaEnderecoQuadro()) {
-    return -1;
+    return true;
   }
 
   // Tenta executar a solicitação e obtem o código de excessão caso não foi possível
@@ -111,18 +112,18 @@ int lerQuadroModbus() {
   switch (codigoExcessao) {
     case 1:
       // TODO Enviar excessão funcao não suportada
-      break;
+      return true;
     case 2:
       // TODO Enviar excessão endereco invalido
-      break;
+      return true;
     case 3:
       // TODO Enviar excessao dados do registrador invalidos
-      break;
+      return true;
     case 0:
       // TODO Enviar resposta de confirmacao da execucao
-      break;
+      return false;
     default:
-      break;
+      return true;
   }
 
 }
