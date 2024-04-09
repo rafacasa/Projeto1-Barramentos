@@ -26,6 +26,8 @@ Crc16 crc;            // variavel Crc
 // Variáveis Globais
 byte receivedData[20]; // Salva o quadro Modbus recebido
 bool broadcast;        // Informa se o último quadro recebido foi um broadcast ou não
+uint16_t registradores[8]; // Os valores a serem alterados pelas solicitações Modbus
+
 //TODO Lembrar de testar se eh broadcast em todas as funcoes de envio de respostas (excessao ou nao)
 
 // put function declarations here:
@@ -33,6 +35,7 @@ bool quadroModbusDisponivel();
 bool checaEnderecoQuadro();
 uint8_t executaSolicitacao();
 uint8_t executaWriteMultipleRegisters();
+void escreveRegistrador(uint16_t endereco, uint16_t valor);
 bool lerQuadroModbus();
 
 void setup() {
@@ -162,7 +165,7 @@ uint8_t executaSolicitacao() {
 }
 
 uint8_t executaWriteMultipleRegisters() {
-  uint16_t quantidade_registradores, endereco_inicial;
+  uint16_t quantidade_registradores, endereco_inicial, valor_informado[8];
   uint8_t contagem_bytes;
 
   // Obtêm o campo Quantidade de resgistradores do quadro Modbus recebido
@@ -202,7 +205,29 @@ uint8_t executaWriteMultipleRegisters() {
     return 2;
   }
 
-  // TODO Checar se os valores a serem escritos estão entre 0 e 1023 - Excessao 4
+  // Checa se os valores a serem escritos estão entre 0 e 1023 - Excessao 4
+  for (uint8_t i = 0; i < quantidade_registradores; i++) {
+    // Obtem o i-ésimo valor a ser escrito em registradores
+    valor_informado[i] = receivedData[(2*i) + 6]; // MSB
+    valor_informado[i] <<= 8;
+    valor_informado[i] += receivedData[(2*i) + 7] & 0xff; // LSB
 
-  // TODO Escrever os valores nos registradores (Criar funcao que recebe o endereco e o valor e ela escreve no registrador)
+    // Caso o valor a ser alterado seja maior que o permitido, levanta a excessão
+    if (valor_informado[i] > 1023) {
+      return 4;
+    }
+  }
+
+  // Escreve os valores nos registradores
+  for (uint8_t i = 0; i < quantidade_registradores; i++) {
+    escreveRegistrador(endereco_inicial + i, valor_informado[i]);
+  }
+
+  return 0;
+}
+
+// Função que escreve o valor informado em "valor" no registrador identificado por "endereco"
+void escreveRegistrador(uint16_t endereco, uint16_t valor) {
+  uint16_t indice = endereco - 16;
+  registradores[indice] = valor;
 }
