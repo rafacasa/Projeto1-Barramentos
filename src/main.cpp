@@ -27,6 +27,7 @@ Crc16 crc;            // variavel Crc
 byte receivedData[20]; // Salva o quadro Modbus recebido
 bool broadcast;        // Informa se o último quadro recebido foi um broadcast ou não
 uint16_t registradores[8]; // Os valores a serem alterados pelas solicitações Modbus
+uint16_t tempo_rest = 0;
 
 //TODO Lembrar de testar se eh broadcast em todas as funcoes de envio de respostas (excessao ou nao)
 
@@ -41,11 +42,23 @@ bool lerQuadroModbus();
 void setup() {
   Serial.begin(BAUDRATE);
   // put your setup code here, to run once:
+
+  // Inicializa com 0 os registradores
+  for (uint8_t i = 0; i < 8; i++) {
+    registradores[i] = 0;
+  }
   //int result = myFunction(2, 3);
 }
 
 void loop() {
-
+  if (tempo_rest == 0) {
+    for (uint8_t i = 0; i < 8; i ++) {
+      Serial.print(i);
+      Serial.print(" registrador eh ");
+      Serial.println(registradores[i]);
+    }
+  }
+  tempo_rest++;
   // Verifica se há um quadro modbus disponivel
   if (quadroModbusDisponivel()) {
     lerQuadroModbus();
@@ -102,11 +115,13 @@ bool lerQuadroModbus() {
 
   // Encerra execução quando há erros de crc no quadro
   if (valueCrc != 0) {
+    Serial.println("CRC INVALIDO");
     return true;
   }
 
   // Encerra execução quando o endereço do quadro não é este dispositivo
   if (!checaEnderecoQuadro()) {
+    Serial.println("ENDERECO INVALIDO");
     return true;
   }
 
@@ -116,15 +131,23 @@ bool lerQuadroModbus() {
   switch (codigoExcessao) {
     case 1:
       // TODO Enviar excessão funcao não suportada
+      Serial.println("Excessao 1");
       return true;
     case 2:
       // TODO Enviar excessão endereco invalido
+      Serial.println("Excessao 2");
       return true;
     case 3:
       // TODO Enviar excessao dados do registrador invalidos
+      Serial.println("Excessao 3");
+      return true;
+    case 4:
+      // TODO Enviar excessao dados do registrador invalidos
+      Serial.println("Excessao 4");
       return true;
     case 0:
       // TODO Enviar resposta de confirmacao da execucao
+      Serial.println("Tudo OK");
       return false;
     default:
       return true;
@@ -209,12 +232,15 @@ uint8_t executaWriteMultipleRegisters() {
   // Checa se os valores a serem escritos estão entre 0 e 1023 - Excessao 4
   for (uint8_t i = 0; i < quantidade_registradores; i++) {
     // Obtem o i-ésimo valor a ser escrito em registradores
-    valor_informado[i] = receivedData[(2*i) + 6]; // MSB
+    valor_informado[i] = receivedData[(2*i) + 7]; // MSB
     valor_informado[i] <<= 8;
-    valor_informado[i] += receivedData[(2*i) + 7] & 0xff; // LSB
+    valor_informado[i] += receivedData[(2*i) + 8] & 0xff; // LSB
 
     // Caso o valor a ser alterado seja maior que o permitido, levanta a excessão
     if (valor_informado[i] > 1023) {
+      Serial.print(i);
+      Serial.print(" registrador eh ");
+      Serial.println(valor_informado[i]);
       return 4;
     }
   }
