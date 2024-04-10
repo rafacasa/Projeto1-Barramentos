@@ -39,6 +39,7 @@ void escreveRegistrador(uint16_t endereco, uint16_t valor);
 bool lerQuadroModbus();
 
 void setup() {
+  Serial.begin(BAUDRATE);
   // put your setup code here, to run once:
   //int result = myFunction(2, 3);
 }
