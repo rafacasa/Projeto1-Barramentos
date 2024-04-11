@@ -13,22 +13,15 @@ Crc16 crc;            // variavel Crc
  */
 #define END_FRAME_TIME (3.5 * 11 * 1000) / BAUDRATE + 1 
 
-//TODO define com os endereços dos registradores modbus para as saidas
-
 //TODO define para os pinos utilizados para a comunicação com o módulo
-
-
 //TODO Fazer interrupcoes por timer para ler botoes e atualizar o display
-//TODO No loop rodar funcoes para esperar comunicações modbus
-
 
 
 // Variáveis Globais
 byte receivedData[20]; // Salva o quadro Modbus recebido
+byte resposta[20]; // Salva o quadro Modbus a ser enviado como resposta
 bool broadcast;        // Informa se o último quadro recebido foi um broadcast ou não
 uint16_t registradores[8]; // Os valores a serem alterados pelas solicitações Modbus
-
-//TODO Lembrar de testar se eh broadcast em todas as funcoes de envio de respostas (excessao ou nao)
 
 // put function declarations here:
 bool quadroModbusDisponivel();
@@ -37,10 +30,13 @@ uint8_t executaSolicitacao();
 uint8_t executaWriteMultipleRegisters();
 void escreveRegistrador(uint16_t endereco, uint16_t valor);
 bool lerQuadroModbus();
+void enviaRespostaModbus(uint8_t qtd_bytes);
 
 void setup() {
   // Inicializa a Serial
   Serial.begin(BAUDRATE);
+
+  // TODO ler botoes para setar endereco
   
   // Inicializa com 0 os registradores
   for(uint8_t i = 0; i < 8; i++) {
@@ -52,8 +48,8 @@ void loop() {
 
   // Verifica se há um quadro modbus disponivel
   if (quadroModbusDisponivel()) {
+    // Quando há um quadro disponível - ler, testar erros e executar
     lerQuadroModbus();
-    
   }
 }
 
@@ -114,24 +110,39 @@ bool lerQuadroModbus() {
     return true;
   }
 
+  // Coloca o endereço recebido na resposta a ser enviada
+  resposta[0] = receivedData[0];
+
   // Tenta executar a solicitação e obtem o código de excessão caso não foi possível
   codigoExcessao = executaSolicitacao();
 
   switch (codigoExcessao) {
     case 1:
-      // TODO Enviar excessão funcao não suportada
+      // Enviando excessão funcao não suportada
+      resposta[1] = receivedData[1] | 0x80;
+      resposta[2] = 0x01;
+      enviaRespostaModbus(3);
       return true;
     case 2:
-      // TODO Enviar excessão endereco invalido
+      // Enviando excessão endereco invalido
+      resposta[1] = receivedData[1] | 0x80;
+      resposta[2] = 0x02;
+      enviaRespostaModbus(3);
       return true;
     case 3:
-      // TODO Enviar excessao dados do registrador invalidos
+      // Enviando excessao dados do registrador invalidos
+      resposta[1] = receivedData[1] | 0x80;
+      resposta[2] = 0x03;
+      enviaRespostaModbus(3);
       return true;
     case 4:
-      // TODO Enviar excessao de valor invalido para o registrador
+      // Enviando excessao de valor invalido para o registrador
+      resposta[1] = receivedData[1] | 0x80;
+      resposta[2] = 0x04;
+      enviaRespostaModbus(3);
       return true;
     case 0:
-      // TODO Enviar resposta de confirmacao da execucao
+      // Resposta enviada durante execução da função
       return false;
     default:
       return true;
@@ -149,6 +160,7 @@ bool checaEnderecoQuadro() {
     return true;
   }
 
+  broadcast = false;
   return endereco_recebido == ENDERECO_ESCRAVO;
 }
 
@@ -172,6 +184,7 @@ uint8_t executaSolicitacao() {
   }
 }
 
+// Funcao que executa a funcao modbus 0x10
 uint8_t executaWriteMultipleRegisters() {
   uint16_t quantidade_registradores, endereco_inicial, valor_informado[8];
   uint8_t contagem_bytes;
@@ -231,6 +244,14 @@ uint8_t executaWriteMultipleRegisters() {
     escreveRegistrador(endereco_inicial + i, valor_informado[i]);
   }
 
+  // Criando e enviando resposta de confirmação
+  resposta[1] = 0x10;
+  resposta[2] = receivedData[2];
+  resposta[3] = receivedData[3];
+  resposta[4] = receivedData[4];
+  resposta[5] = receivedData[5];
+
+  enviaRespostaModbus(6);
   return 0;
 }
 
@@ -238,4 +259,20 @@ uint8_t executaWriteMultipleRegisters() {
 void escreveRegistrador(uint16_t endereco, uint16_t valor) {
   uint16_t indice = endereco - 16;
   registradores[indice] = valor;
+}
+
+// Funcao que envia a resposta Modbus
+void enviaRespostaModbus(uint8_t qtd_bytes) {
+  uint16_t valor_crc;
+
+  // Checa se o ultimo quadro recebido era um broadcast
+  if (!broadcast) {
+    valor_crc = crc.Modbus(resposta, 0, qtd_bytes); // Calculando o CRC
+    resposta[qtd_bytes] = valor_crc & 0xff;  // Adicionando o CRC na resposta
+    resposta[qtd_bytes+1] = valor_crc >> 8;
+
+    // TODO ligar o transmissor quando usar rs485
+    Serial.write(resposta, qtd_bytes + 2);
+    //TODO Serial.flush e desligar o transmissor quando usar rs485
+  }
 }
