@@ -44,12 +44,18 @@ void setup() {
   }
 }
 
+//TEMP - Calcular tempo
+unsigned long tempo, tempo2;
 void loop() {
 
+  tempo = millis();
   // Verifica se há um quadro modbus disponivel
   if (quadroModbusDisponivel()) {
     // Quando há um quadro disponível - ler, testar erros e executar
     lerQuadroModbus();
+    tempo2 = millis();
+    Serial.print("Tempo para ler e responder Modbus - ");
+    Serial.println(tempo2 - tempo);
   }
 }
 
