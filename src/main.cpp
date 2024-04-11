@@ -39,9 +39,13 @@ void escreveRegistrador(uint16_t endereco, uint16_t valor);
 bool lerQuadroModbus();
 
 void setup() {
+  // Inicializa a Serial
   Serial.begin(BAUDRATE);
-  // put your setup code here, to run once:
-  //int result = myFunction(2, 3);
+  
+  // Inicializa com 0 os registradores
+  for(uint8_t i = 0; i < 8; i++) {
+    registradores[i] = 0;
+  }
 }
 
 void loop() {
@@ -122,6 +126,9 @@ bool lerQuadroModbus() {
       return true;
     case 3:
       // TODO Enviar excessao dados do registrador invalidos
+      return true;
+    case 4:
+      // TODO Enviar excessao de valor invalido para o registrador
       return true;
     case 0:
       // TODO Enviar resposta de confirmacao da execucao
@@ -209,9 +216,9 @@ uint8_t executaWriteMultipleRegisters() {
   // Checa se os valores a serem escritos estão entre 0 e 1023 - Excessao 4
   for (uint8_t i = 0; i < quantidade_registradores; i++) {
     // Obtem o i-ésimo valor a ser escrito em registradores
-    valor_informado[i] = receivedData[(2*i) + 6]; // MSB
+    valor_informado[i] = receivedData[(2*i) + 7]; // MSB
     valor_informado[i] <<= 8;
-    valor_informado[i] += receivedData[(2*i) + 7] & 0xff; // LSB
+    valor_informado[i] += receivedData[(2*i) + 8] & 0xff; // LSB
 
     // Caso o valor a ser alterado seja maior que o permitido, levanta a excessão
     if (valor_informado[i] > 1023) {
