@@ -1,12 +1,27 @@
 #include <Arduino.h>
 
 #include "Crc16.h"    //Biblioteca de cálculo do CRC16
+#include <TM1638plus.h> // Biblioteca de manipulação do módulo de display
+
 Crc16 crc;            // variavel Crc
 
 // Constantes do projeto
 #define BAUDRATE 9600 //Taxa de comunicação serial
 #define ENDERECO_ESCRAVO 0x01 //Endereço deste escravo na rede Modbus
 #define RS_485_ENABLE_PIN 2  //pino que ativa e desativa o transmissor rs485
+
+// Pinos utilizados pelo módulo TM1638
+#define STROBE_TM_PIN 8
+#define CLOCK_TM_PIN 9
+#define DIO_TM_PIN 10
+
+// Constantes utilizadas pelo módulo TM1638
+const bool HIGH_FREQ_TM = false; // Configuração de alta frequência - falso para Uno
+
+const long intervalo_leitura_botao = 100; // Tempo em ms entre leituras dos botões
+const long intervalo_att_display = 1000; // Tempo em ms entre atualizações do display
+
+TM1638plus tm(STROBE_TM_PIN, CLOCK_TM_PIN , DIO_TM_PIN, HIGH_FREQ_TM); // Objeto usado para controlar o módulo TM1638
 
 /* Tempo de fim de frame Modbus RTU em ms          
  * ( 3.5 byte * 11 bits/byte (8-N-2) * 1000 ms/s ) / 9600 bits/s ~= 4 ms
@@ -22,6 +37,7 @@ byte receivedData[20]; // Salva o quadro Modbus recebido
 byte resposta[20]; // Salva o quadro Modbus a ser enviado como resposta
 bool broadcast;        // Informa se o último quadro recebido foi um broadcast ou não
 uint16_t registradores[8]; // Os valores a serem alterados pelas solicitações Modbus
+uint8_t botoes; // Cada bit representa o estado de um botão do módulo TM1638
 
 // put function declarations here:
 bool quadroModbusDisponivel();
@@ -31,8 +47,13 @@ uint8_t executaWriteMultipleRegisters();
 void escreveRegistrador(uint16_t endereco, uint16_t valor);
 bool lerQuadroModbus();
 void enviaRespostaModbus(uint8_t qtd_bytes);
+bool lerBotoes();
 
 void setup() {
+  // Inicializa o módulo TM 1638
+  tm.displayBegin();
+  tm.displayText("88888888");
+
   // Inicializa a Serial
   Serial.begin(BAUDRATE);
 
@@ -45,12 +66,20 @@ void setup() {
 }
 
 void loop() {
+  // Faz a leitura dos botões
+  if (lerBotoes()) {
+    Serial.print("Botao Pressionado - ");
+    Serial.println(botoes);
+    if (botoes > 0) {
+      // Há um botão pressionado
+    }
+  }
 
   // Verifica se há um quadro modbus disponivel
-  if (quadroModbusDisponivel()) {
+  // if (quadroModbusDisponivel()) {
     // Quando há um quadro disponível - ler, testar erros e executar
-    lerQuadroModbus();
-  }
+    // lerQuadroModbus();
+  // }
 }
 
 // Função que verifica se há um quadro modbus disponivel para ser lido na porta Serial
@@ -275,4 +304,26 @@ void enviaRespostaModbus(uint8_t qtd_bytes) {
     Serial.write(resposta, qtd_bytes + 2);
     //TODO Serial.flush e desligar o transmissor quando usar rs485
   }
+}
+
+bool lerBotoes() {
+  uint8_t botoes_atual;
+  static bool pressionado = false;
+  static unsigned long tempo_anterior = 0; // Salva o tempo da execução anterior
+  unsigned long tempo_atual = millis();
+
+  if (tempo_atual - tempo_anterior >= intervalo_leitura_botao) {
+    tempo_anterior = tempo_atual;
+    botoes_atual = tm.readButtons();
+    if (botoes_atual == botoes) {
+      if (pressionado) {
+        pressionado = false;
+        return true;
+      }
+    } else {
+      botoes = botoes_atual;
+      pressionado = true;
+    }
+  }
+  return false;
 }
