@@ -75,6 +75,8 @@ void loop() {
     }
   }
 
+  tm.DisplayDecNumNibble(10, 30, false, TMAlignTextRight);
+
   // Verifica se há um quadro modbus disponivel
   // if (quadroModbusDisponivel()) {
     // Quando há um quadro disponível - ler, testar erros e executar
