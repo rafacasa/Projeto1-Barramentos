@@ -28,9 +28,6 @@ TM1638plus tm(STROBE_TM_PIN, CLOCK_TM_PIN , DIO_TM_PIN, HIGH_FREQ_TM); // Objeto
  */
 #define END_FRAME_TIME (3.5 * 11 * 1000) / BAUDRATE + 1 
 
-//TODO define para os pinos utilizados para a comunicação com o módulo
-//TODO Fazer interrupcoes por timer para ler botoes e atualizar o display
-
 
 // Variáveis Globais
 byte receivedData[20]; // Salva o quadro Modbus recebido
@@ -38,6 +35,7 @@ byte resposta[20]; // Salva o quadro Modbus a ser enviado como resposta
 bool broadcast;        // Informa se o último quadro recebido foi um broadcast ou não
 uint16_t registradores[8]; // Os valores a serem alterados pelas solicitações Modbus
 uint8_t botoes; // Cada bit representa o estado de um botão do módulo TM1638
+uint8_t reg_exibido_1, reg_exibido_2; // Guarda os registradores sendo exibidos no momento
 
 // put function declarations here:
 bool quadroModbusDisponivel();
@@ -48,6 +46,8 @@ void escreveRegistrador(uint16_t endereco, uint16_t valor);
 bool lerQuadroModbus();
 void enviaRespostaModbus(uint8_t qtd_bytes);
 bool lerBotoes();
+void atualizaDisplay();
+void atualizaRegistradoresExbidos();
 
 void setup() {
   // Inicializa o módulo TM 1638
@@ -63,8 +63,12 @@ void setup() {
   for(uint8_t i = 0; i < 8; i++) {
     registradores[i] = 0;
   }
-}
 
+  // Inicializa os registradores exibidos
+  reg_exibido_1 = 0;
+  reg_exibido_2 = 1;
+}
+// TODO - codigo teste liga todos os leds testar LEDS
 void loop() {
   // Faz a leitura dos botões
   if (lerBotoes()) {
@@ -72,16 +76,17 @@ void loop() {
     Serial.println(botoes);
     if (botoes > 0) {
       // Há um botão pressionado
+      atualizaRegistradoresExbidos();
     }
   }
 
-  tm.DisplayDecNumNibble(10, 30, false, TMAlignTextRight);
+  atualizaDisplay();
 
   // Verifica se há um quadro modbus disponivel
-  // if (quadroModbusDisponivel()) {
+  if (quadroModbusDisponivel()) {
     // Quando há um quadro disponível - ler, testar erros e executar
-    // lerQuadroModbus();
-  // }
+    lerQuadroModbus();
+  }
 }
 
 // Função que verifica se há um quadro modbus disponivel para ser lido na porta Serial
@@ -308,6 +313,7 @@ void enviaRespostaModbus(uint8_t qtd_bytes) {
   }
 }
 
+// Funcao que le e faz debounce dos botões
 bool lerBotoes() {
   uint8_t botoes_atual;
   static bool pressionado = false;
@@ -328,4 +334,41 @@ bool lerBotoes() {
     }
   }
   return false;
+}
+
+// Funcao que atualiza os dados exibidos no display a cada intervalo configurado
+void atualizaDisplay() {
+  uint16_t leds = 0;
+  unsigned long currentMillis = millis();
+  static unsigned long previousMillisDisplay = 0;  // executed once 
+  if (currentMillis - previousMillisDisplay >= intervalo_att_display) {
+    // Atualizando leds acesos
+    leds = (1 << reg_exibido_1) + (1 << reg_exibido_2);
+    leds = leds << 8;
+    tm.setLEDs(leds);
+    
+    // Atualizando valor do display
+    if (registradores[reg_exibido_1] < registradores[reg_exibido_2]) {
+      tm.DisplayDecNumNibble(registradores[reg_exibido_1], registradores[reg_exibido_2],  false, TMAlignTextRight);
+    } else {
+      tm.DisplayDecNumNibble(registradores[reg_exibido_2], registradores[reg_exibido_1],  false, TMAlignTextRight);
+    }
+  }
+}
+
+// Funcao que atualiza os indices dos registradores que estão sendo exibidos, confome os botões pressionados
+void atualizaRegistradoresExbidos() {
+  uint8_t indice_botao;
+  // Checa se apenas um botão esta apertado
+  if ((botoes > 0) && ((botoes & (botoes-1)) == 0)) {
+    // Obtem o indice do bit 1 (LSB = 1, MSB = 8)
+    indice_botao = ffs(botoes) - 1;
+
+    if (indice_botao == reg_exibido_1) {
+      return;
+    }
+
+    reg_exibido_2 = reg_exibido_1;
+    reg_exibido_1 = indice_botao;
+  }
 }
