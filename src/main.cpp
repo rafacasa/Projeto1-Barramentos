@@ -348,7 +348,7 @@ void atualizaDisplay() {
     tm.setLEDs(leds);
     
     // Atualizando valor do display
-    if (registradores[reg_exibido_1] < registradores[reg_exibido_2]) {
+    if (reg_exibido_1 < reg_exibido_2) {
       tm.DisplayDecNumNibble(registradores[reg_exibido_1], registradores[reg_exibido_2],  false, TMAlignTextRight);
     } else {
       tm.DisplayDecNumNibble(registradores[reg_exibido_2], registradores[reg_exibido_1],  false, TMAlignTextRight);
