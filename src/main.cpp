@@ -23,7 +23,7 @@ const bool HIGH_FREQ_TM = false; // Configuração de alta frequência - falso p
 const long intervalo_leitura_botao = 100; // Tempo em ms entre leituras dos botões
 const long intervalo_att_display = 1000; // Tempo em ms entre atualizações do display
 
-const uint8_t pinos_leds[] = {30, 32, 34, 36, 38, 40, 42, 44}; // Pinos utilizados pelo leds indicadores
+const uint8_t pinos_leds[] = {44, 42, 40, 38, 36, 34, 32, 30}; // Pinos utilizados pelo leds indicadores
 
 TM1638plus tm(STROBE_TM_PIN, CLOCK_TM_PIN , DIO_TM_PIN, HIGH_FREQ_TM); // Objeto usado para controlar o módulo TM1638
 
