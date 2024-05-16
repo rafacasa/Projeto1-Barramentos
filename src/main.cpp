@@ -7,7 +7,6 @@ Crc16 crc;            // variavel Crc
 
 // Constantes do projeto
 #define BAUDRATE 9600 //Taxa de comunicação serial
-#define ENDERECO_ESCRAVO 0x01 //Endereço deste escravo na rede Modbus
 #define RS_485_ENABLE_PIN 2  //pino que ativa e desativa o transmissor rs485
 
 // Pinos utilizados pelo módulo TM1638
@@ -15,11 +14,16 @@ Crc16 crc;            // variavel Crc
 #define CLOCK_TM_PIN 9
 #define DIO_TM_PIN 10
 
+#define ENDERECO_PIN_DEZ 22
+#define ENDERECO_PIN_UN 24
+
 // Constantes utilizadas pelo módulo TM1638
 const bool HIGH_FREQ_TM = false; // Configuração de alta frequência - falso para Uno
 
 const long intervalo_leitura_botao = 100; // Tempo em ms entre leituras dos botões
 const long intervalo_att_display = 1000; // Tempo em ms entre atualizações do display
+
+const uint8_t pinos_leds[] = {30, 32, 34, 36, 38, 40, 42, 44}; // Pinos utilizados pelo leds indicadores
 
 TM1638plus tm(STROBE_TM_PIN, CLOCK_TM_PIN , DIO_TM_PIN, HIGH_FREQ_TM); // Objeto usado para controlar o módulo TM1638
 
@@ -36,6 +40,7 @@ bool broadcast;        // Informa se o último quadro recebido foi um broadcast 
 uint16_t registradores[8]; // Os valores a serem alterados pelas solicitações Modbus
 uint8_t botoes; // Cada bit representa o estado de um botão do módulo TM1638
 uint8_t reg_exibido_1, reg_exibido_2; // Guarda os registradores sendo exibidos no momento
+uint8_t ENDERECO_ESCRAVO; // Guarda o endereco do escravo, conforme lido pelos botoes
 
 // put function declarations here:
 bool quadroModbusDisponivel();
@@ -47,6 +52,7 @@ bool lerQuadroModbus();
 void enviaRespostaModbus(uint8_t qtd_bytes);
 bool lerBotoes();
 void atualizaDisplay();
+void desligaLeds();
 void atualizaRegistradoresExbidos();
 
 void setup() {
@@ -57,7 +63,39 @@ void setup() {
   // Inicializa a Serial
   Serial.begin(BAUDRATE);
 
+  // Inicializa os pinos:
+  //Pinos dos leds
+  for (int i = 0; i < 8; i++) {
+    pinMode(pinos_leds[i], OUTPUT);
+  }
+
+  // Pinos dos botoes seletores do endereco
+  pinMode(ENDERECO_PIN_DEZ, INPUT_PULLUP);
+  pinMode(ENDERECO_PIN_UN, INPUT_PULLUP);
+
+  // Pino que ativa e desativa o transceiver
+  pinMode(RS_485_ENABLE_PIN, OUTPUT);
+  digitalWrite(RS_485_ENABLE_PIN, LOW);
+  
+  int unidade_endereco = digitalRead(ENDERECO_PIN_UN);
+  int dezena_endereco = digitalRead(ENDERECO_PIN_DEZ);
+
+  if (dezena_endereco == LOW) {
+    if (unidade_endereco == LOW) {
+      ENDERECO_ESCRAVO = 4;
+    } else {
+      ENDERECO_ESCRAVO = 3;
+    }
+  } else {
+    if (unidade_endereco == LOW) {
+      ENDERECO_ESCRAVO = 2;
+    } else {
+      ENDERECO_ESCRAVO = 1;
+    }
+  }
+
   // TODO ler botoes para setar endereco
+  // TODO USAR LEDS EM 8 SAIDAS DIGITAIS PARA INFORMAR OS REGISTRADORES SENDO EXIBIDOS
   
   // Inicializa com 0 os registradores
   for(uint8_t i = 0; i < 8; i++) {
@@ -72,8 +110,8 @@ void setup() {
 void loop() {
   // Faz a leitura dos botões
   if (lerBotoes()) {
-    Serial.print("Botao Pressionado - ");
-    Serial.println(botoes);
+    //Serial.print("Botao Pressionado - ");
+    //Serial.println(botoes);
     if (botoes > 0) {
       // Há um botão pressionado
       atualizaRegistradoresExbidos();
@@ -258,7 +296,7 @@ uint8_t executaWriteMultipleRegisters() {
 
   // Verifica se todos os endereços de registradoes são disponíveis
   // Gera a excessão 2
-  if (endereco_inicial + quantidade_registradores > 0x0017) {
+  if (endereco_inicial + quantidade_registradores > 0x0018) {
     return 2;
   }
 
@@ -307,9 +345,11 @@ void enviaRespostaModbus(uint8_t qtd_bytes) {
     resposta[qtd_bytes] = valor_crc & 0xff;  // Adicionando o CRC na resposta
     resposta[qtd_bytes+1] = valor_crc >> 8;
 
-    // TODO ligar o transmissor quando usar rs485
+
+    digitalWrite(RS_485_ENABLE_PIN, HIGH); // Ativa o transceiver
     Serial.write(resposta, qtd_bytes + 2);
-    //TODO Serial.flush e desligar o transmissor quando usar rs485
+    Serial.flush(); // Espera terminar a transmissao
+    digitalWrite(RS_485_ENABLE_PIN, LOW); // Desativa o transceiver
   }
 }
 
@@ -338,14 +378,13 @@ bool lerBotoes() {
 
 // Funcao que atualiza os dados exibidos no display a cada intervalo configurado
 void atualizaDisplay() {
-  uint16_t leds = 0;
   unsigned long currentMillis = millis();
   static unsigned long previousMillisDisplay = 0;  // executed once 
   if (currentMillis - previousMillisDisplay >= intervalo_att_display) {
     // Atualizando leds acesos
-    leds = (1 << reg_exibido_1) + (1 << reg_exibido_2);
-    leds = leds << 8;
-    tm.setLEDs(leds);
+    desligaLeds();
+    digitalWrite(pinos_leds[reg_exibido_1], HIGH);
+    digitalWrite(pinos_leds[reg_exibido_2], HIGH);
     
     // Atualizando valor do display
     if (reg_exibido_1 < reg_exibido_2) {
@@ -353,6 +392,13 @@ void atualizaDisplay() {
     } else {
       tm.DisplayDecNumNibble(registradores[reg_exibido_2], registradores[reg_exibido_1],  false, TMAlignTextRight);
     }
+  }
+}
+
+// Funcao para desligar todos os leds
+void desligaLeds() {
+  for (int i = 0; i < 8; i++) {
+    digitalWrite(pinos_leds[i], LOW);
   }
 }
 
